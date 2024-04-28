@@ -16,6 +16,7 @@ Future<User> loginUser(
   final map = <String, dynamic>{};
   map['username'] = username.toString();
   map['password'] = password.toString();
+
   final response =
       await http.post(Uri.parse('http://10.0.2.2:8000/login'), body: map);
 
@@ -36,7 +37,7 @@ Future<User> loginUser(
   } else {
     // If the server did not return a 201 CREATED response,
     // then throw an exception.
-    throw Exception('Failed to create album.');
+    throw Exception('Failed to login.');
   }
 }
 
@@ -109,6 +110,4 @@ class _LoginState extends State<Login> {
       ),
     );
   }
-
-  void login() {}
 }

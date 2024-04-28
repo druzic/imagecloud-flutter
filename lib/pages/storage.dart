@@ -1,59 +1,91 @@
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:http/http.dart' as http;
+import 'package:photo_view/photo_view.dart';
 
-class Storage extends StatelessWidget {
-  const Storage({super.key});
+class Storage extends StatefulWidget {
+  const Storage({Key? key}) : super(key: key);
+
+  @override
+  State<Storage> createState() => _StorageState();
+}
+
+class _StorageState extends State<Storage> {
+  final String baseUrl = 'http://10.0.2.2:8000/images/';
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.grey[200],
-      appBar: AppBar(
-        backgroundColor: Colors.blue[900],
-        title: const Text('Your pictures'),
-        elevation: 0,
-      ),
-      drawer: Drawer(
-        child: ListView(
-          padding: EdgeInsets.zero,
-          children: [
-            const DrawerHeader(
-              decoration: BoxDecoration(
-                color: Colors.blue,
+      body: FutureBuilder<List<String>>(
+        future: _retrieveToken().then((token) => fetchImages(token)),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return Center(child: CircularProgressIndicator());
+          } else if (snapshot.hasError) {
+            return Center(child: Text('Error: ${snapshot.error}'));
+          } else {
+            return GridView.builder(
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 2,
+                crossAxisSpacing: 4.0,
+                mainAxisSpacing: 4.0,
               ),
-              child: Text('Drawer Header'),
-            ),
-            ListTile(
-              title: const Text('Item 1'),
-              onTap: () {
-                // Update the state of the app.
-                // ...
+              itemCount: snapshot.data!.length,
+              itemBuilder: (context, index) {
+                final imagePath = snapshot.data![index];
+                final imageUrl = baseUrl + imagePath;
+                return GestureDetector(
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => PhotoView(
+                          imageProvider: NetworkImage(imageUrl),
+                          minScale: PhotoViewComputedScale.contained,
+                          maxScale: PhotoViewComputedScale.covered * 2,
+                        ),
+                      ),
+                    );
+                  },
+                  child: Image.network(
+                    imageUrl,
+                    fit: BoxFit.cover,
+                  ),
+                );
               },
-            ),
-            ListTile(
-              title: const Text('Item 2'),
-              onTap: () {
-                // Update the state of the app.
-                // ...
-              },
-            ),
-          ],
-        ),
-      ),
-      body: SafeArea(
-        child:
-            PictureGrid(), // Remove FutureBuilder and directly use PictureGrid
+            );
+          }
+        },
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: () {
-          pickImagesFromGallery();
+          pickImagesFromGallery(context);
         },
         tooltip: 'Add images',
         child: const Icon(Icons.add),
+      ),
+      bottomNavigationBar: BottomNavigationBar(
+        items: const [
+          BottomNavigationBarItem(
+            icon: Icon(Icons.home),
+            label: 'Home',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.storage),
+            label: 'Storage',
+          ),
+        ],
+        currentIndex: 1,
+        onTap: (index) {
+          if (index == 0) {
+            Navigator.pushReplacementNamed(context, '/storage');
+          }
+        },
       ),
     );
   }
@@ -61,82 +93,57 @@ class Storage extends StatelessWidget {
   Future<String> _retrieveToken() async {
     final storage = FlutterSecureStorage();
     final token = await storage.read(key: 'access_token');
-    print(token);
-    return token ??
-        ''; // Vraćanje tokena, ili praznog niza ako token nije dostupan
+    return token ?? '';
   }
 
-  Future pickImagesFromGallery() async {
-    // Implementacija funkcije za odabir slika iz galerije
+  Future pickImagesFromGallery(BuildContext context) async {
     final ImagePicker picker = ImagePicker();
-    final List<XFile> images = await picker.pickMultiImage();
-    final token = await _retrieveToken();
-    await uploadPictures(images, token);
+    final List<XFile>? images = await picker.pickMultiImage();
+    if (images != null) {
+      final token = await _retrieveToken();
+      await uploadPictures(images, token, context);
+    }
   }
 
-  Future uploadPictures(List<XFile> images, String token) async {
+  Future uploadPictures(
+      List<XFile> images, String token, BuildContext context) async {
     for (XFile image in images) {
       List<int> imageBytes = await image.readAsBytes();
-
-      // Create a multipart request
       var request = http.MultipartRequest(
           'POST', Uri.parse('http://10.0.2.2:8000/images'));
       request.headers['Authorization'] = 'Bearer $token';
+      request.files.add(http.MultipartFile.fromBytes(
+        'image',
+        imageBytes,
+        filename: 'image.jpg',
+      ));
 
-      // Add image file to the request
-      request.files.add(http.MultipartFile.fromBytes('image', imageBytes,
-          filename: 'image.jpg'));
-
-      // Send the request
       var response = await request.send();
-
-      // Check the response
       if (response.statusCode == 201) {
         print('Image uploaded successfully');
       } else {
         print('Error uploading image: ${response.statusCode}');
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error uploading image: ${response.statusCode}'),
+          ),
+        );
       }
     }
   }
-}
 
-class PictureGrid extends StatelessWidget {
-  const PictureGrid({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return FutureBuilder(
-      future:
-          fetchImages(), // Implement fetchImages to get images from your backend
-      builder: (BuildContext context, AsyncSnapshot<List<String>> snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator());
-        } else if (snapshot.hasError) {
-          return Center(child: Text('Error: ${snapshot.error}'));
-        } else {
-          final List<String> images = snapshot.data!;
-          return GridView.builder(
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 2, // 2 columns
-              crossAxisSpacing: 8.0,
-              mainAxisSpacing: 8.0,
-            ),
-            itemCount: images.length,
-            itemBuilder: (BuildContext context, int index) {
-              return Image.network(
-                images[index],
-                fit: BoxFit.cover,
-              );
-            },
-          );
-        }
-      },
+  Future<List<String>> fetchImages(String token) async {
+    final response = await http.get(
+      Uri.parse('http://10.0.2.2:8000/images'),
+      headers: <String, String>{'Authorization': 'Bearer $token'},
     );
-  }
-
-  Future<List<String>> fetchImages() async {
-    // Implement fetching images from your backend
-    // Return a list of image URLs
-    return [];
+    if (response.statusCode == 200) {
+      final List<dynamic> imagePath = jsonDecode(response.body);
+      final List<String> paths =
+          imagePath.map((image) => image['path'] as String).toList();
+      return paths;
+    } else {
+      throw Exception('Failed to load images');
+    }
   }
 }

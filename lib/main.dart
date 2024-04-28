@@ -27,7 +27,7 @@ void main() async {
 class MyApp extends StatelessWidget {
   final String initialRoute;
 
-  const MyApp({required this.initialRoute});
+  MyApp({required this.initialRoute});
 
   @override
   Widget build(BuildContext context) {
