@@ -11,61 +11,33 @@ class Login extends StatefulWidget {
   State<Login> createState() => _LoginState();
 }
 
-Future<User> loginUser(
-    BuildContext context, String username, String password) async {
-  final map = <String, dynamic>{};
-  map['username'] = username.toString();
-  map['password'] = password.toString();
-
-  final response =
-      await http.post(Uri.parse('http://10.0.2.2:8000/login'), body: map);
-
-  if (response.statusCode == 200) {
-    // If the server did return a 200 OK response,
-    // then parse the JSON.
-    final parsedJson = jsonDecode(response.body);
-    final user = User.fromJson(parsedJson);
-
-    // Save token to secure storage
-    final storage = FlutterSecureStorage();
-    await storage.write(key: 'access_token', value: user.access_token);
-    await storage.write(key: 'token_type', value: user.token_type);
-    final bool isTokenValid = JwtDecoder.isExpired(user.access_token);
-    print('Is token valid: $isTokenValid');
-    Navigator.pushReplacementNamed(context, '/storage');
-    return User.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
-  } else {
-    // If the server did not return a 201 CREATED response,
-    // then throw an exception.
-    throw Exception('Failed to login.');
-  }
-}
-
-class User {
-  final String access_token;
-  final String token_type;
-
-  const User({required this.access_token, required this.token_type});
-
-  factory User.fromJson(Map<String, dynamic> json) {
-    return switch (json) {
-      {
-        'access_token': String access_token,
-        'token_type': String token_type,
-      } =>
-        User(
-          access_token: access_token,
-          token_type: token_type,
-        ),
-      _ => throw const FormatException('Failed to load User.'),
-    };
-  }
-}
-
 class _LoginState extends State<Login> {
   final TextEditingController _controllerEmail = TextEditingController();
   final TextEditingController _controllerPassword = TextEditingController();
-  Future<User>? _futureUser;
+  final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
+  bool _isLoading = false;
+
+  Future<void> _loginUser() async {
+    if (!_formKey.currentState!.validate()) return;
+
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      final user = await loginUser(
+          context, _controllerEmail.text, _controllerPassword.text);
+      Navigator.pushReplacementNamed(context, '/storage');
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to login: ${e.toString()}')),
+      );
+    } finally {
+      setState(() {
+        _isLoading = false;
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -78,36 +50,107 @@ class _LoginState extends State<Login> {
       ),
       body: SafeArea(
         child: Center(
-            child: Column(
-          children: [
-            TextField(
-              controller: _controllerEmail,
-              decoration: const InputDecoration(
-                labelText: 'Email',
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(16.0),
+            child: Form(
+              key: _formKey,
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  TextFormField(
+                    controller: _controllerEmail,
+                    decoration: const InputDecoration(
+                      labelText: 'Email',
+                      border: OutlineInputBorder(),
+                    ),
+                    keyboardType: TextInputType.emailAddress,
+                    validator: (value) {
+                      if (value == null || value.isEmpty) {
+                        return 'Please enter your email';
+                      }
+                      if (!RegExp(r'^[^@]+@[^@]+\.[^@]+').hasMatch(value)) {
+                        return 'Please enter a valid email address';
+                      }
+                      return null;
+                    },
+                  ),
+                  const SizedBox(height: 16.0),
+                  TextFormField(
+                    controller: _controllerPassword,
+                    decoration: const InputDecoration(
+                      labelText: 'Password',
+                      border: OutlineInputBorder(),
+                    ),
+                    obscureText: true,
+                    validator: (value) {
+                      if (value == null || value.isEmpty) {
+                        return 'Please enter your password';
+                      }
+                      if (value.length < 6) {
+                        return 'Password must be at least 6 characters';
+                      }
+                      return null;
+                    },
+                  ),
+                  const SizedBox(height: 16.0),
+                  _isLoading
+                      ? const CircularProgressIndicator()
+                      : ElevatedButton(
+                          onPressed: _loginUser,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.blue[900],
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 50, vertical: 15),
+                          ),
+                          child: const Text('Login'),
+                        ),
+                ],
               ),
             ),
-            TextField(
-              controller: _controllerPassword,
-              decoration: const InputDecoration(
-                labelText: 'Password',
-              ),
-              obscureText: true,
-            ),
-            TextButton(
-                style: ButtonStyle(
-                  foregroundColor:
-                      MaterialStateProperty.all<Color>(Colors.blue),
-                ),
-                onPressed: () {
-                  setState(() {
-                    _futureUser = loginUser(context, _controllerEmail.text,
-                        _controllerPassword.text);
-                  });
-                },
-                child: const Text("Login"))
-          ],
-        )),
+          ),
+        ),
       ),
+    );
+  }
+}
+
+Future<User> loginUser(
+    BuildContext context, String username, String password) async {
+  final map = <String, dynamic>{
+    'username': username,
+    'password': password,
+  };
+
+  final response =
+      await http.post(Uri.parse('http://10.0.2.2:8000/login'), body: map);
+
+  if (response.statusCode == 200) {
+    final parsedJson = jsonDecode(response.body);
+    final user = User.fromJson(parsedJson);
+
+    final storage = FlutterSecureStorage();
+    await storage.write(key: 'access_token', value: user.access_token);
+    await storage.write(key: 'token_type', value: user.token_type);
+
+    final bool isTokenValid = !JwtDecoder.isExpired(user.access_token);
+    print('Is token valid: $isTokenValid');
+
+    return user;
+  } else {
+    throw Exception('Failed to login.');
+  }
+}
+
+class User {
+  final String access_token;
+  final String token_type;
+
+  const User({required this.access_token, required this.token_type});
+
+  factory User.fromJson(Map<String, dynamic> json) {
+    return User(
+      access_token: json['access_token'],
+      token_type: json['token_type'],
     );
   }
 }
