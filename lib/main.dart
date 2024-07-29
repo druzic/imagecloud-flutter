@@ -5,18 +5,17 @@ import 'package:imagecloud/pages/home.dart';
 import 'package:imagecloud/pages/login.dart';
 import 'package:imagecloud/pages/register.dart';
 import 'package:imagecloud/pages/storage.dart';
+import 'package:imagecloud/pages/folder.dart'; // Pretpostavimo da postoji folder stranica
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  final storage = FlutterSecureStorage();
+  const storage = FlutterSecureStorage();
   final token = await storage.read(key: 'access_token');
 
   String initialRoute;
   if (token != null) {
-    // Provjera je li token valjan
     final bool isTokenValid = !JwtDecoder.isExpired(token);
-    print(isTokenValid);
-    initialRoute = isTokenValid ? '/storage' : '/';
+    initialRoute = isTokenValid ? '/main' : '/';
   } else {
     initialRoute = '/';
   }
@@ -27,7 +26,7 @@ void main() async {
 class MyApp extends StatelessWidget {
   final String initialRoute;
 
-  MyApp({required this.initialRoute});
+  const MyApp({super.key, required this.initialRoute});
 
   @override
   Widget build(BuildContext context) {
@@ -38,8 +37,67 @@ class MyApp extends StatelessWidget {
         '/': (context) => const Home(),
         '/login': (context) => const Login(),
         '/register': (context) => const Register(),
-        '/storage': (context) => const Storage(),
+        '/main': (context) => const MainScreen(),
       },
+    );
+  }
+}
+
+class MainScreen extends StatefulWidget {
+  const MainScreen({super.key});
+
+  @override
+  _MainScreenState createState() => _MainScreenState();
+}
+
+class _MainScreenState extends State<MainScreen> {
+  int _currentIndex = 0;
+  final PageController _pageController = PageController();
+
+  final List<Widget> _pages = [
+    const Storage(), // Stranica za prikazivanje Storage
+    const Folder(), // Stranica za prikazivanje Folder
+  ];
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
+  }
+
+  void _onItemTapped(int index) {
+    setState(() {
+      _currentIndex = index;
+    });
+    _pageController.jumpToPage(index);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: PageView(
+        controller: _pageController,
+        onPageChanged: (index) {
+          setState(() {
+            _currentIndex = index;
+          });
+        },
+        children: _pages,
+      ),
+      bottomNavigationBar: BottomNavigationBar(
+        items: const [
+          BottomNavigationBarItem(
+            icon: Icon(Icons.storage),
+            label: 'Storage',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.folder),
+            label: 'Folder',
+          ),
+        ],
+        currentIndex: _currentIndex,
+        onTap: _onItemTapped,
+      ),
     );
   }
 }

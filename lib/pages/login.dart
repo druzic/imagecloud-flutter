@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
@@ -25,13 +27,13 @@ class _LoginState extends State<Login> {
     });
 
     try {
-      final user = await loginUser(
-          context, _controllerEmail.text, _controllerPassword.text);
+      await loginUser(context, _controllerEmail.text, _controllerPassword.text);
       Navigator.pushReplacementNamed(context, '/storage');
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Failed to login: ${e.toString()}')),
       );
+      print('Failed to login: ${e.toString()}');
     } finally {
       setState(() {
         _isLoading = false;
@@ -128,7 +130,7 @@ Future<User> loginUser(
     final parsedJson = jsonDecode(response.body);
     final user = User.fromJson(parsedJson);
 
-    final storage = FlutterSecureStorage();
+    const storage = FlutterSecureStorage();
     await storage.write(key: 'access_token', value: user.access_token);
     await storage.write(key: 'token_type', value: user.token_type);
 
