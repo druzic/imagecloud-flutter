@@ -26,6 +26,7 @@ class _StorageState extends State<Storage> {
         backgroundColor: Colors.blue[900],
         title: const Text('Storage'),
         elevation: 0,
+        automaticallyImplyLeading: false,
       ),
       body: SafeArea(
         child: FutureBuilder<List<String>>(
@@ -126,7 +127,7 @@ class _StorageState extends State<Storage> {
                           ],
                         );
                       }
-                      return SizedBox.shrink();
+                      return const SizedBox.shrink();
                     },
                   ),
                 ],

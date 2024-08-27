@@ -1,9 +1,8 @@
-import 'dart:math';
-
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:imagecloud/pages/mainscreen.dart';
 import 'package:jwt_decoder/jwt_decoder.dart';
 
 class Login extends StatefulWidget {
@@ -28,7 +27,11 @@ class _LoginState extends State<Login> {
 
     try {
       await loginUser(context, _controllerEmail.text, _controllerPassword.text);
-      Navigator.pushReplacementNamed(context, '/storage');
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (context) => const MainScreen()),
+        (Route<dynamic> route) => false,
+      );
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Failed to login: ${e.toString()}')),
