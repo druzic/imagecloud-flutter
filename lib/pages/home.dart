@@ -1,6 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:imagecloud/pages/login.dart';
-import 'package:imagecloud/pages/register.dart';
 
 class Home extends StatefulWidget {
   const Home({super.key});

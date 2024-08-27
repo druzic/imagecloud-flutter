@@ -21,50 +21,67 @@ class _FolderState extends State<Folder> {
   }
 
   Future<void> _fetchFolders() async {
-    /*
-    final token = await _retrieveToken();
-    /final response = await http.get(
-      Uri.parse('http://10.0.2.2:8000/folders'),
-      headers: <String, String>{'Authorization': 'Bearer $token'},
-    );
+    print('Fetching folders...');
+    try {
+      final token = await _retrieveToken();
+      print('Token retrieved: $token');
+      final response = await http.get(
+        Uri.parse('http://10.0.2.2:8000/folders'),
+        headers: <String, String>{'Authorization': 'Bearer $token'},
+      );
 
-    if (response.statusCode == 200) {
-      setState(() {
-        _folders = List<String>.from(jsonDecode(response.body));
-      });
-    } else {
-      throw Exception('Failed to load folders');
-    }*/
+      if (response.statusCode == 200) {
+        // Assuming the response is a list of maps, each with a 'name' field
+        final List<dynamic> jsonResponse = jsonDecode(response.body);
+        setState(() {
+          _folders =
+              jsonResponse.map((folder) => folder['name'].toString()).toList();
+        });
+      } else {
+        throw Exception('Failed to load folders');
+      }
+    } catch (e) {
+      print('Error fetching folders: $e');
+    }
   }
 
   Future<void> _createFolder() async {
-    /*
     final folderName = _folderNameController.text;
-    if (folderName.isEmpty) return;
+    if (folderName.isEmpty) {
+      print('Folder name is empty.');
+      return;
+    }
 
-    final token = await _retrieveToken();
-    final response = await http.post(
-      Uri.parse('http://10.0.2.2:8000/folders'),
-      headers: <String, String>{
-        'Content-Type': 'application/json; charset=UTF-8',
-        'Authorization': 'Bearer $token',
-      },
-      body: jsonEncode(<String, String>{'name': folderName}),
-    );
+    try {
+      final token = await _retrieveToken();
+      print('Token retrieved: $token');
+      final response = await http.post(
+        Uri.parse('http://10.0.2.2:8000/folders'),
+        headers: <String, String>{
+          'Content-Type': 'application/json; charset=UTF-8',
+          'Authorization': 'Bearer $token',
+        },
+        body: jsonEncode(<String, String>{'name': folderName}),
+      );
 
-    if (response.statusCode == 201) {
-      setState(() {
-        _folders.add(folderName);
-        _folderNameController.clear();
-      });
-    } else {
-      throw Exception('Failed to create folder');
-    }*/
+      if (response.statusCode == 201) {
+        setState(() {
+          _folders.add(folderName);
+          _folderNameController.clear();
+        });
+        print("Created folder: $folderName");
+      } else {
+        throw Exception('Failed to create folder');
+      }
+    } catch (e) {
+      print('Error creating folder: $e');
+    }
   }
 
   Future<String> _retrieveToken() async {
-    final storage = FlutterSecureStorage();
+    const storage = FlutterSecureStorage();
     final token = await storage.read(key: 'access_token');
+    print('Token in storage: $token');
     return token ?? '';
   }
 
@@ -74,7 +91,7 @@ class _FolderState extends State<Folder> {
       backgroundColor: Colors.grey[200],
       appBar: AppBar(
         backgroundColor: Colors.blue[900],
-        title: const Text('Folder '),
+        title: const Text('Folder'),
         elevation: 0,
       ),
       body: SafeArea(
@@ -98,23 +115,25 @@ class _FolderState extends State<Folder> {
               ),
               const SizedBox(height: 20),
               Expanded(
-                child: ListView.builder(
-                  itemCount: _folders.length,
-                  itemBuilder: (context, index) {
-                    return ListTile(
-                      title: Text(_folders[index]),
-                      onTap: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) =>
-                                FolderDetail(folderName: _folders[index]),
-                          ),
-                        );
-                      },
-                    );
-                  },
-                ),
+                child: _folders.isEmpty
+                    ? const Center(child: Text('No folders available'))
+                    : ListView.builder(
+                        itemCount: _folders.length,
+                        itemBuilder: (context, index) {
+                          return ListTile(
+                            title: Text(_folders[index]),
+                            onTap: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) =>
+                                      FolderDetail(folderName: _folders[index]),
+                                ),
+                              );
+                            },
+                          );
+                        },
+                      ),
               ),
             ],
           ),
@@ -140,7 +159,7 @@ class FolderDetail extends StatelessWidget {
       ),
       body: SafeArea(
         child: Center(
-          child: Text('Details for map: $folderName'),
+          child: Text('Details for folder: $folderName'),
         ),
       ),
     );

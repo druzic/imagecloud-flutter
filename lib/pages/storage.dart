@@ -215,15 +215,23 @@ class _StorageState extends State<Storage> {
 
   Future<void> _deleteSelectedImages() async {
     final token = await _retrieveToken();
+    bool deletionSuccessful = true;
+
     for (String imagePath in _selectedImages.value) {
       final response = await http.delete(
         Uri.parse('$baseUrl/images/$imagePath'),
         headers: {'Authorization': 'Bearer $token'},
       );
-      print(baseUrl + '/images/' + imagePath);
-      if (response.statusCode == 200) {
+
+      if (response.statusCode == 204) {
         print('Image deleted successfully');
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Image deleted successfully'),
+          ),
+        );
       } else {
+        deletionSuccessful = false;
         print('Error deleting image: ${response.statusCode}');
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -232,7 +240,12 @@ class _StorageState extends State<Storage> {
         );
       }
     }
-    _selectedImages.value.clear();
+
+    if (deletionSuccessful) {
+      setState(() {
+        _selectedImages.value.clear();
+      });
+    }
   }
 
   void _additionalAction() {
