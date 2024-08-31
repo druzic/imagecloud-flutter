@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
+import 'package:photo_view/photo_view.dart';
 
 class Folder extends StatefulWidget {
   const Folder({super.key});
@@ -13,6 +14,7 @@ class Folder extends StatefulWidget {
 class _FolderState extends State<Folder> {
   final TextEditingController _folderNameController = TextEditingController();
   List<String> _folders = [];
+  String? _selectedFolder;
 
   @override
   void initState() {
@@ -21,17 +23,14 @@ class _FolderState extends State<Folder> {
   }
 
   Future<void> _fetchFolders() async {
-    print('Fetching folders...');
     try {
       final token = await _retrieveToken();
-      print('Token retrieved: $token');
       final response = await http.get(
         Uri.parse('http://10.0.2.2:8000/folders'),
         headers: <String, String>{'Authorization': 'Bearer $token'},
       );
 
       if (response.statusCode == 200) {
-        // Assuming the response is a list of maps, each with a 'name' field
         final List<dynamic> jsonResponse = jsonDecode(response.body);
         setState(() {
           _folders =
@@ -48,13 +47,11 @@ class _FolderState extends State<Folder> {
   Future<void> _createFolder() async {
     final folderName = _folderNameController.text;
     if (folderName.isEmpty) {
-      print('Folder name is empty.');
       return;
     }
 
     try {
       final token = await _retrieveToken();
-      print('Token retrieved: $token');
       final response = await http.post(
         Uri.parse('http://10.0.2.2:8000/folders'),
         headers: <String, String>{
@@ -69,7 +66,6 @@ class _FolderState extends State<Folder> {
           _folders.add(folderName);
           _folderNameController.clear();
         });
-        print("Created folder: $folderName");
       } else {
         throw Exception('Failed to create folder');
       }
@@ -78,11 +74,73 @@ class _FolderState extends State<Folder> {
     }
   }
 
+  Future<void> _deleteFolder(String folderName) async {
+    try {
+      final token = await _retrieveToken();
+      final response = await http.delete(
+        Uri.parse('http://10.0.2.2:8000/folders/$folderName'),
+        headers: <String, String>{'Authorization': 'Bearer $token'},
+      );
+
+      if (response.statusCode == 204) {
+        setState(() {
+          _folders.remove(folderName);
+          _selectedFolder = null;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Folder "$folderName" deleted successfully')),
+        );
+      } else {
+        throw Exception('Failed to delete folder');
+      }
+    } catch (e) {
+      print('Error deleting folder: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error deleting folder: $e')),
+      );
+    }
+  }
+
   Future<String> _retrieveToken() async {
     const storage = FlutterSecureStorage();
     final token = await storage.read(key: 'access_token');
-    print('Token in storage: $token');
     return token ?? '';
+  }
+
+  void _shareFolder(String folderName) {
+    //Share.share('Check out this folder: $folderName');
+  }
+
+  void _onFolderLongPress(String folderName) {
+    setState(() {
+      _selectedFolder = folderName;
+    });
+
+    showModalBottomSheet(
+      context: context,
+      builder: (BuildContext context) {
+        return Wrap(
+          children: [
+            ListTile(
+              leading: const Icon(Icons.delete, color: Colors.red),
+              title: const Text('Delete Folder'),
+              onTap: () async {
+                Navigator.pop(context);
+                await _deleteFolder(folderName);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.share),
+              title: const Text('Share Folder'),
+              onTap: () {
+                Navigator.pop(context);
+                _shareFolder(folderName);
+              },
+            ),
+          ],
+        );
+      },
+    );
   }
 
   @override
@@ -120,17 +178,19 @@ class _FolderState extends State<Folder> {
                     : ListView.builder(
                         itemCount: _folders.length,
                         itemBuilder: (context, index) {
+                          final folderName = _folders[index];
                           return ListTile(
-                            title: Text(_folders[index]),
+                            title: Text(folderName),
                             onTap: () {
                               Navigator.push(
                                 context,
                                 MaterialPageRoute(
                                   builder: (context) =>
-                                      FolderDetail(folderName: _folders[index]),
+                                      FolderDetail(folderName: folderName),
                                 ),
                               );
                             },
+                            onLongPress: () => _onFolderLongPress(folderName),
                           );
                         },
                       ),
@@ -143,10 +203,54 @@ class _FolderState extends State<Folder> {
   }
 }
 
-class FolderDetail extends StatelessWidget {
+class FolderDetail extends StatefulWidget {
   final String folderName;
 
   const FolderDetail({required this.folderName, Key? key}) : super(key: key);
+
+  @override
+  _FolderDetailState createState() => _FolderDetailState();
+}
+
+class _FolderDetailState extends State<FolderDetail> {
+  List<String> _images = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchImages();
+  }
+
+  Future<void> _fetchImages() async {
+    try {
+      final token = await _retrieveToken();
+      final response = await http.get(
+        Uri.parse('http://10.0.2.2:8000/folders/${widget.folderName}'),
+        headers: <String, String>{
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json; charset=UTF-8',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final List<dynamic> jsonResponse = jsonDecode(response.body);
+        setState(() {
+          _images =
+              jsonResponse.map((image) => image['path'].toString()).toList();
+        });
+      } else {
+        throw Exception('Failed to load images');
+      }
+    } catch (e) {
+      print('Error fetching images: $e');
+    }
+  }
+
+  Future<String> _retrieveToken() async {
+    const storage = FlutterSecureStorage();
+    final token = await storage.read(key: 'access_token');
+    return token ?? '';
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -154,13 +258,47 @@ class FolderDetail extends StatelessWidget {
       backgroundColor: Colors.grey[200],
       appBar: AppBar(
         backgroundColor: Colors.blue[900],
-        title: Text(folderName),
+        title: Text(widget.folderName),
         elevation: 0,
       ),
       body: SafeArea(
-        child: Center(
-          child: Text('Details for folder: $folderName'),
-        ),
+        child: _images.isEmpty
+            ? const Center(child: Text('No images in this folder'))
+            : GridView.builder(
+                padding: const EdgeInsets.all(8.0),
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 2,
+                  crossAxisSpacing: 4.0,
+                  mainAxisSpacing: 4.0,
+                ),
+                itemCount: _images.length,
+                itemBuilder: (context, index) {
+                  final imageUrl =
+                      'http://10.0.2.2:8000/images/${_images[index]}'
+                          .replaceAll(r'\', '/');
+                  return GestureDetector(
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => Scaffold(
+                            appBar: AppBar(),
+                            body: PhotoView(
+                              imageProvider: NetworkImage(imageUrl),
+                              minScale: PhotoViewComputedScale.contained,
+                              maxScale: PhotoViewComputedScale.covered * 2,
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                    child: Image.network(
+                      imageUrl,
+                      fit: BoxFit.cover,
+                    ),
+                  );
+                },
+              ),
       ),
     );
   }
