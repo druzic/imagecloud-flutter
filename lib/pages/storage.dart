@@ -250,8 +250,113 @@ class _StorageState extends State<Storage> {
   }
 
   void _additionalAction() {
-    // Implement your additional action here
-    print(
-        'Performing additional action on selected images: ${_selectedImages.value}');
+    showModalBottomSheet(
+      context: context,
+      builder: (BuildContext context) {
+        return Wrap(
+          children: [
+            ListTile(
+              leading: const Icon(Icons.drive_file_move_outlined),
+              title: const Text('Move to Folder'),
+              onTap: () async {
+                Navigator.pop(context); // Close the bottom sheet
+                _showFolderSelectionDialog();
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.share),
+              title: const Text('Share Images'),
+              onTap: () {
+                Navigator.pop(context); // Close the bottom sheet
+                // Implement your share functionality here
+              },
+            ),
+            // Add more actions here if needed
+          ],
+        );
+      },
+    );
+  }
+
+  void _showFolderSelectionDialog() async {
+    // Assuming you have a list of folders from your API or local storage
+    List<String> folders = await fetchFolders();
+
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('Select Folder'),
+          content: SizedBox(
+            width: double.maxFinite,
+            child: ListView.builder(
+              shrinkWrap: true,
+              itemCount: folders.length,
+              itemBuilder: (BuildContext context, int index) {
+                return ListTile(
+                  title: Text(folders[index]),
+                  onTap: () async {
+                    Navigator.pop(context); // Close the dialog
+                    await _moveImagesToFolder(folders[index]);
+                  },
+                );
+              },
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Future<List<String>> fetchFolders() async {
+    // This function should fetch the list of available folders from your API
+    final token = await _retrieveToken();
+    final response = await http.get(
+      Uri.parse('$baseUrl/folders'),
+      headers: {'Authorization': 'Bearer $token'},
+    );
+
+    if (response.statusCode == 200) {
+      final List<dynamic> folderData = jsonDecode(response.body);
+      return folderData.map((folder) => folder['name'] as String).toList();
+    } else {
+      throw Exception('Failed to load folders');
+    }
+  }
+
+  Future<void> _moveImagesToFolder(String folderName) async {
+    final token = await _retrieveToken();
+    bool moveSuccessful = true;
+
+    for (String imagePath in _selectedImages.value) {
+      final response = await http.post(
+        Uri.parse('$baseUrl/images/change_folder'),
+        headers: <String, String>{
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json; charset=UTF-8',
+        },
+        body: jsonEncode(
+            <String, String>{'image_path': imagePath, 'folder': folderName}),
+      );
+
+      if (response.statusCode == 200) {
+        print('Image moved to $folderName successfully');
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Image moved to $folderName successfully')),
+        );
+      } else {
+        moveSuccessful = false;
+        print('Error moving image: ${response.statusCode}');
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error moving image: ${response.statusCode}')),
+        );
+      }
+    }
+
+    if (moveSuccessful) {
+      setState(() {
+        _selectedImages.value.clear();
+      });
+    }
   }
 }
