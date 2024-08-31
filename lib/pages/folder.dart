@@ -108,7 +108,8 @@ class _FolderState extends State<Folder> {
   }
 
   void _shareFolder(String folderName) {
-    //Share.share('Check out this folder: $folderName');
+    // Uncomment to enable sharing
+    // Share.share('Check out this folder: $folderName');
   }
 
   void _onFolderLongPress(String folderName) {
@@ -214,11 +215,13 @@ class FolderDetail extends StatefulWidget {
 
 class _FolderDetailState extends State<FolderDetail> {
   List<String> _images = [];
+  List<String> _folders = []; // List to hold folders for moving images
 
   @override
   void initState() {
     super.initState();
     _fetchImages();
+    _fetchFolders(); // Fetch all available folders
   }
 
   Future<void> _fetchImages() async {
@@ -246,10 +249,147 @@ class _FolderDetailState extends State<FolderDetail> {
     }
   }
 
+  Future<void> _fetchFolders() async {
+    try {
+      final token = await _retrieveToken();
+      final response = await http.get(
+        Uri.parse('http://10.0.2.2:8000/folders'),
+        headers: <String, String>{
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json; charset=UTF-8',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final List<dynamic> jsonResponse = jsonDecode(response.body);
+        setState(() {
+          _folders =
+              jsonResponse.map((folder) => folder['name'].toString()).toList();
+        });
+      } else {
+        throw Exception('Failed to load folders');
+      }
+    } catch (e) {
+      print('Error fetching folders: $e');
+    }
+  }
+
+  Future<void> _moveImageToFolder(String imagePath, String targetFolder) async {
+    try {
+      final token = await _retrieveToken();
+      final response = await http.post(
+        Uri.parse('http://10.0.2.2:8000/images/change_folder'),
+        headers: <String, String>{
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json; charset=UTF-8',
+        },
+        body: jsonEncode(
+            <String, String>{'image_path': imagePath, 'folder': targetFolder}),
+      );
+
+      if (response.statusCode == 200) {
+        setState(() {
+          _images.remove(imagePath);
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Image moved to $targetFolder successfully')),
+        );
+      } else {
+        throw Exception('Failed to move image');
+      }
+    } catch (e) {
+      print('Error moving image: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error moving image: $e')),
+      );
+    }
+  }
+
+  Future<void> _deleteImage(String imagePath) async {
+    try {
+      final token = await _retrieveToken();
+      final response = await http.delete(
+        Uri.parse('http://10.0.2.2:8000/images/$imagePath'),
+        headers: <String, String>{'Authorization': 'Bearer $token'},
+      );
+
+      if (response.statusCode == 204) {
+        setState(() {
+          _images.remove(imagePath);
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Image deleted successfully')),
+        );
+      } else {
+        throw Exception('Failed to delete image');
+      }
+    } catch (e) {
+      print('Error deleting image: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error deleting image: $e')),
+      );
+    }
+  }
+
   Future<String> _retrieveToken() async {
     const storage = FlutterSecureStorage();
     final token = await storage.read(key: 'access_token');
     return token ?? '';
+  }
+
+  void _onImageLongPress(String imagePath) {
+    showModalBottomSheet(
+      context: context,
+      builder: (BuildContext context) {
+        return Wrap(
+          children: [
+            ListTile(
+              leading: const Icon(Icons.drive_file_move_outlined),
+              title: const Text('Move to Folder'),
+              onTap: () async {
+                Navigator.pop(context);
+                _showFolderSelectionDialog(imagePath);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.delete, color: Colors.red),
+              title: const Text('Delete Image'),
+              onTap: () async {
+                Navigator.pop(context);
+                await _deleteImage(imagePath);
+              },
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void _showFolderSelectionDialog(String imagePath) async {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('Select Folder'),
+          content: SizedBox(
+            width: double.maxFinite,
+            child: ListView.builder(
+              shrinkWrap: true,
+              itemCount: _folders.length,
+              itemBuilder: (BuildContext context, int index) {
+                return ListTile(
+                  title: Text(_folders[index]),
+                  onTap: () async {
+                    Navigator.pop(context); // Close the dialog
+                    await _moveImageToFolder(imagePath, _folders[index]);
+                  },
+                );
+              },
+            ),
+          ),
+        );
+      },
+    );
   }
 
   @override
@@ -292,6 +432,7 @@ class _FolderDetailState extends State<FolderDetail> {
                         ),
                       );
                     },
+                    onLongPress: () => _onImageLongPress(_images[index]),
                     child: Image.network(
                       imageUrl,
                       fit: BoxFit.cover,

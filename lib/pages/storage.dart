@@ -109,22 +109,10 @@ class _StorageState extends State<Storage> {
                     valueListenable: _selectedImages,
                     builder: (context, selectedImages, child) {
                       if (selectedImages.isNotEmpty) {
-                        return Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                          children: [
-                            ElevatedButton.icon(
-                              onPressed: _deleteSelectedImages,
-                              icon: const Icon(Icons.delete),
-                              label: const Text('Delete'),
-                              style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.red),
-                            ),
-                            ElevatedButton.icon(
-                              onPressed: _additionalAction,
-                              icon: const Icon(Icons.more_horiz),
-                              label: const Text('Action'),
-                            ),
-                          ],
+                        return ElevatedButton.icon(
+                          onPressed: _showManageSelectedImagesModal,
+                          icon: const Icon(Icons.more_horiz),
+                          label: const Text('Manage Selected Images'),
                         );
                       }
                       return const SizedBox.shrink();
@@ -172,7 +160,7 @@ class _StorageState extends State<Storage> {
       List<int> imageBytes = await image.readAsBytes();
       var request = http.MultipartRequest(
         'POST',
-        Uri.parse('$baseUrl/images'), // Correct endpoint for image upload
+        Uri.parse('$baseUrl/images'),
       );
       request.headers['Authorization'] = 'Bearer $token';
       request.files.add(
@@ -195,7 +183,6 @@ class _StorageState extends State<Storage> {
         );
       }
     }
-    // Refresh the grid view after uploading images
     setState(() {});
   }
 
@@ -249,81 +236,6 @@ class _StorageState extends State<Storage> {
     }
   }
 
-  void _additionalAction() {
-    showModalBottomSheet(
-      context: context,
-      builder: (BuildContext context) {
-        return Wrap(
-          children: [
-            ListTile(
-              leading: const Icon(Icons.drive_file_move_outlined),
-              title: const Text('Move to Folder'),
-              onTap: () async {
-                Navigator.pop(context); // Close the bottom sheet
-                _showFolderSelectionDialog();
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.share),
-              title: const Text('Share Images'),
-              onTap: () {
-                Navigator.pop(context); // Close the bottom sheet
-                // Implement your share functionality here
-              },
-            ),
-            // Add more actions here if needed
-          ],
-        );
-      },
-    );
-  }
-
-  void _showFolderSelectionDialog() async {
-    // Assuming you have a list of folders from your API or local storage
-    List<String> folders = await fetchFolders();
-
-    showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: const Text('Select Folder'),
-          content: SizedBox(
-            width: double.maxFinite,
-            child: ListView.builder(
-              shrinkWrap: true,
-              itemCount: folders.length,
-              itemBuilder: (BuildContext context, int index) {
-                return ListTile(
-                  title: Text(folders[index]),
-                  onTap: () async {
-                    Navigator.pop(context); // Close the dialog
-                    await _moveImagesToFolder(folders[index]);
-                  },
-                );
-              },
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  Future<List<String>> fetchFolders() async {
-    // This function should fetch the list of available folders from your API
-    final token = await _retrieveToken();
-    final response = await http.get(
-      Uri.parse('$baseUrl/folders'),
-      headers: {'Authorization': 'Bearer $token'},
-    );
-
-    if (response.statusCode == 200) {
-      final List<dynamic> folderData = jsonDecode(response.body);
-      return folderData.map((folder) => folder['name'] as String).toList();
-    } else {
-      throw Exception('Failed to load folders');
-    }
-  }
-
   Future<void> _moveImagesToFolder(String folderName) async {
     final token = await _retrieveToken();
     bool moveSuccessful = true;
@@ -358,5 +270,77 @@ class _StorageState extends State<Storage> {
         _selectedImages.value.clear();
       });
     }
+  }
+
+  Future<List<String>> fetchFolders() async {
+    final token = await _retrieveToken();
+    final response = await http.get(
+      Uri.parse('$baseUrl/folders'),
+      headers: {'Authorization': 'Bearer $token'},
+    );
+
+    if (response.statusCode == 200) {
+      final List<dynamic> folderData = jsonDecode(response.body);
+      return folderData.map((folder) => folder['name'] as String).toList();
+    } else {
+      throw Exception('Failed to load folders');
+    }
+  }
+
+  void _showManageSelectedImagesModal() {
+    showModalBottomSheet(
+      context: context,
+      builder: (BuildContext context) {
+        return Wrap(
+          children: [
+            ListTile(
+              leading: const Icon(Icons.delete, color: Colors.red),
+              title: const Text('Delete Selected Images'),
+              onTap: () async {
+                Navigator.pop(context);
+                await _deleteSelectedImages();
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.drive_file_move_outlined),
+              title: const Text('Move Selected Images to Folder'),
+              onTap: () async {
+                Navigator.pop(context);
+                _showFolderSelectionDialog();
+              },
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void _showFolderSelectionDialog() async {
+    List<String> folders = await fetchFolders();
+
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('Select Folder'),
+          content: SizedBox(
+            width: double.maxFinite,
+            child: ListView.builder(
+              shrinkWrap: true,
+              itemCount: folders.length,
+              itemBuilder: (BuildContext context, int index) {
+                return ListTile(
+                  title: Text(folders[index]),
+                  onTap: () async {
+                    Navigator.pop(context); // Close the dialog
+                    await _moveImagesToFolder(folders[index]);
+                  },
+                );
+              },
+            ),
+          ),
+        );
+      },
+    );
   }
 }
