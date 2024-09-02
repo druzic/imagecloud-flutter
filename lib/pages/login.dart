@@ -139,7 +139,7 @@ Future<User> loginUser(
 
     final bool isTokenValid = !JwtDecoder.isExpired(user.access_token);
     print('Is token valid: $isTokenValid');
-
+    print(parsedJson);
     return user;
   } else {
     throw Exception('Failed to login.');

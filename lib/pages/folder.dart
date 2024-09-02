@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 import 'package:photo_view/photo_view.dart';
+import 'package:jwt_decoder/jwt_decoder.dart';
 
 class Folder extends StatefulWidget {
   const Folder({super.key});
@@ -11,20 +12,34 @@ class Folder extends StatefulWidget {
   State<Folder> createState() => _FolderState();
 }
 
-class _FolderState extends State<Folder> {
+Future<String> _extractUserIdFromToken(String token) async {
+  try {
+    Map<String, dynamic> decodedToken = JwtDecoder.decode(token);
+    String userId = decodedToken['user_id'].toString();
+    return userId;
+  } catch (e) {
+    print('Error decoding token: $e');
+    return '';
+  }
+}
+
+class _FolderState extends State<Folder> with SingleTickerProviderStateMixin {
   final TextEditingController _folderNameController = TextEditingController();
-  List<String> _folders = [];
-  String? _selectedFolder;
+  List<String> _myFolders = [];
+  List<String> _sharedFolders = [];
+  TabController? _tabController;
 
   @override
   void initState() {
     super.initState();
     _fetchFolders();
+    _tabController = TabController(length: 2, vsync: this);
   }
 
   Future<void> _fetchFolders() async {
     try {
       final token = await _retrieveToken();
+      String userId = await _extractUserIdFromToken(token);
       final response = await http.get(
         Uri.parse('http://10.0.2.2:8000/folders'),
         headers: <String, String>{'Authorization': 'Bearer $token'},
@@ -32,9 +47,16 @@ class _FolderState extends State<Folder> {
 
       if (response.statusCode == 200) {
         final List<dynamic> jsonResponse = jsonDecode(response.body);
+        print(jsonResponse);
         setState(() {
-          _folders =
-              jsonResponse.map((folder) => folder['name'].toString()).toList();
+          _myFolders = jsonResponse
+              .where((folder) => folder['owner_id'].toString() == userId)
+              .map<String>((folder) => folder['name'].toString())
+              .toList();
+          _sharedFolders = jsonResponse
+              .where((folder) => folder['owner_id'].toString() != userId)
+              .map<String>((folder) => folder['name'].toString())
+              .toList();
         });
       } else {
         throw Exception('Failed to load folders');
@@ -63,7 +85,7 @@ class _FolderState extends State<Folder> {
 
       if (response.statusCode == 201) {
         setState(() {
-          _folders.add(folderName);
+          _myFolders.add(folderName);
           _folderNameController.clear();
         });
       } else {
@@ -84,8 +106,7 @@ class _FolderState extends State<Folder> {
 
       if (response.statusCode == 204) {
         setState(() {
-          _folders.remove(folderName);
-          _selectedFolder = null;
+          _myFolders.remove(folderName);
         });
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Folder "$folderName" deleted successfully')),
@@ -108,15 +129,72 @@ class _FolderState extends State<Folder> {
   }
 
   void _shareFolder(String folderName) {
-    // Uncomment to enable sharing
-    // Share.share('Check out this folder: $folderName');
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        TextEditingController emailController = TextEditingController();
+
+        return AlertDialog(
+          title: const Text('Share Folder'),
+          content: TextField(
+            controller: emailController,
+            decoration: const InputDecoration(
+              labelText: 'Enter email address',
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+              },
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                final email = emailController.text;
+                if (email.isNotEmpty) {
+                  try {
+                    final token = await _retrieveToken();
+                    final response = await http.post(
+                      Uri.parse('http://10.0.2.2:8000/folders/share'),
+                      headers: <String, String>{
+                        'Content-Type': 'application/json; charset=UTF-8',
+                        'Authorization': 'Bearer $token',
+                      },
+                      body: jsonEncode(<String, String>{
+                        'email': email,
+                        'folder': folderName,
+                      }),
+                    );
+
+                    if (response.statusCode == 201) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content:
+                              Text('Folder shared with $email successfully'),
+                        ),
+                      );
+                    } else {
+                      throw Exception('Failed to share folder');
+                    }
+                  } catch (e) {
+                    print('Error sharing folder: $e');
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Error sharing folder: $e')),
+                    );
+                  }
+                }
+                Navigator.of(context).pop();
+              },
+              child: const Text('Share'),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   void _onFolderLongPress(String folderName) {
-    setState(() {
-      _selectedFolder = folderName;
-    });
-
     showModalBottomSheet(
       context: context,
       builder: (BuildContext context) {
@@ -144,63 +222,94 @@ class _FolderState extends State<Folder> {
     );
   }
 
+  void _showCreateFolderDialog() {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Create Folder'),
+          content: TextField(
+            controller: _folderNameController,
+            decoration: const InputDecoration(
+              labelText: 'Folder Name',
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+                _folderNameController.clear();
+              },
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+                _createFolder();
+              },
+              child: const Text('Create'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.grey[200],
       appBar: AppBar(
         backgroundColor: Colors.blue[900],
-        title: const Text('Folder'),
-        elevation: 0,
-      ),
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: Column(
-            children: [
-              TextField(
-                controller: _folderNameController,
-                decoration: const InputDecoration(
-                  labelText: 'Folder Name',
-                ),
-              ),
-              const SizedBox(height: 20),
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.blue[900],
-                ),
-                onPressed: _createFolder,
-                child: const Text('Create Folder'),
-              ),
-              const SizedBox(height: 20),
-              Expanded(
-                child: _folders.isEmpty
-                    ? const Center(child: Text('No folders available'))
-                    : ListView.builder(
-                        itemCount: _folders.length,
-                        itemBuilder: (context, index) {
-                          final folderName = _folders[index];
-                          return ListTile(
-                            title: Text(folderName),
-                            onTap: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) =>
-                                      FolderDetail(folderName: folderName),
-                                ),
-                              );
-                            },
-                            onLongPress: () => _onFolderLongPress(folderName),
-                          );
-                        },
-                      ),
-              ),
-            ],
-          ),
+        title: const Text('Folders'),
+        bottom: TabBar(
+          controller: _tabController,
+          tabs: const [
+            Tab(text: 'My Folders'),
+            Tab(text: 'Shared With Me'),
+          ],
         ),
       ),
+      body: TabBarView(
+        controller: _tabController,
+        children: [
+          _buildFolderList(_myFolders),
+          _buildFolderList(_sharedFolders),
+        ],
+      ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: _showCreateFolderDialog,
+        tooltip: 'Create Folder',
+        child: const Icon(Icons.create_new_folder),
+      ),
     );
+  }
+
+  Widget _buildFolderList(List<String> folders) {
+    return folders.isEmpty
+        ? const Center(child: Text('No folders available'))
+        : ListView.builder(
+            itemCount: folders.length,
+            itemBuilder: (context, index) {
+              final folderName = folders[index];
+              return Card(
+                margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+                child: ListTile(
+                  title: Text(folderName),
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) =>
+                            FolderDetail(folderName: folderName),
+                      ),
+                    );
+                  },
+                  onLongPress: () => _onFolderLongPress(folderName),
+                ),
+              );
+            },
+          );
   }
 }
 
@@ -215,13 +324,13 @@ class FolderDetail extends StatefulWidget {
 
 class _FolderDetailState extends State<FolderDetail> {
   List<String> _images = [];
-  List<String> _folders = []; // List to hold folders for moving images
+  List<String> _folders = [];
 
   @override
   void initState() {
     super.initState();
     _fetchImages();
-    _fetchFolders(); // Fetch all available folders
+    _fetchFolders();
   }
 
   Future<void> _fetchImages() async {
@@ -252,6 +361,7 @@ class _FolderDetailState extends State<FolderDetail> {
   Future<void> _fetchFolders() async {
     try {
       final token = await _retrieveToken();
+      String userId = await _extractUserIdFromToken(token);
       final response = await http.get(
         Uri.parse('http://10.0.2.2:8000/folders'),
         headers: <String, String>{
@@ -263,8 +373,10 @@ class _FolderDetailState extends State<FolderDetail> {
       if (response.statusCode == 200) {
         final List<dynamic> jsonResponse = jsonDecode(response.body);
         setState(() {
-          _folders =
-              jsonResponse.map((folder) => folder['name'].toString()).toList();
+          _folders = jsonResponse
+              .where((folder) => folder['owner_id'].toString() == userId)
+              .map((folder) => folder['name'].toString())
+              .toList();
         });
       } else {
         throw Exception('Failed to load folders');

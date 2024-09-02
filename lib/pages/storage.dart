@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:http/http.dart' as http;
+import 'package:jwt_decoder/jwt_decoder.dart';
 import 'package:photo_view/photo_view.dart';
 
 class Storage extends StatefulWidget {
@@ -109,10 +110,20 @@ class _StorageState extends State<Storage> {
                     valueListenable: _selectedImages,
                     builder: (context, selectedImages, child) {
                       if (selectedImages.isNotEmpty) {
-                        return ElevatedButton.icon(
-                          onPressed: _showManageSelectedImagesModal,
-                          icon: const Icon(Icons.more_horiz),
-                          label: const Text('Manage Selected Images'),
+                        return Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                          children: [
+                            IconButton(
+                              onPressed: _clearSelection,
+                              icon: const Icon(Icons.clear),
+                              tooltip: 'Deselect All',
+                            ),
+                            ElevatedButton.icon(
+                              onPressed: _showManageSelectedImagesModal,
+                              icon: const Icon(Icons.more_horiz),
+                              label: const Text('Manage Selected Images'),
+                            ),
+                          ],
                         );
                       }
                       return const SizedBox.shrink();
@@ -124,10 +135,18 @@ class _StorageState extends State<Storage> {
           },
         ),
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () => pickImagesFromGallery(context),
-        tooltip: 'Add images',
-        child: const Icon(Icons.add),
+      floatingActionButton: ValueListenableBuilder<Set<String>>(
+        valueListenable: _selectedImages,
+        builder: (context, selectedImages, child) {
+          if (selectedImages.isEmpty) {
+            return FloatingActionButton(
+              onPressed: () => pickImagesFromGallery(context),
+              tooltip: 'Add images',
+              child: const Icon(Icons.add),
+            );
+          }
+          return const SizedBox.shrink(); // Hide FAB when images are selected
+        },
       ),
     );
   }
@@ -139,6 +158,10 @@ class _StorageState extends State<Storage> {
     } else {
       _selectedImages.value = Set.from(_selectedImages.value)..add(imagePath);
     }
+  }
+
+  void _clearSelection() {
+    _selectedImages.value = {};
   }
 
   Future<String> _retrieveToken() async {
@@ -194,7 +217,6 @@ class _StorageState extends State<Storage> {
 
     if (response.statusCode == 200) {
       final List<dynamic> imagePath = jsonDecode(response.body);
-      print(imagePath);
       return imagePath.map((image) => image['path'] as String).toList();
     } else {
       throw Exception('Failed to load images');
@@ -272,8 +294,21 @@ class _StorageState extends State<Storage> {
     }
   }
 
+  Future<String> _extractUserIdFromToken(String token) async {
+    try {
+      Map<String, dynamic> decodedToken = JwtDecoder.decode(token);
+      String userId = decodedToken['user_id'].toString();
+      return userId;
+    } catch (e) {
+      print('Error decoding token: $e');
+      return '';
+    }
+  }
+
   Future<List<String>> fetchFolders() async {
     final token = await _retrieveToken();
+
+    String userId = await _extractUserIdFromToken(token);
     final response = await http.get(
       Uri.parse('$baseUrl/folders'),
       headers: {'Authorization': 'Bearer $token'},
@@ -281,7 +316,10 @@ class _StorageState extends State<Storage> {
 
     if (response.statusCode == 200) {
       final List<dynamic> folderData = jsonDecode(response.body);
-      return folderData.map((folder) => folder['name'] as String).toList();
+      return folderData
+          .where((folder) => folder['owner_id'].toString() == userId)
+          .map((folder) => folder['name'] as String)
+          .toList();
     } else {
       throw Exception('Failed to load folders');
     }
