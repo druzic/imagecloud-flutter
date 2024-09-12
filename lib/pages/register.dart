@@ -1,3 +1,5 @@
+// ignore_for_file: use_build_context_synchronously
+
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
@@ -18,7 +20,7 @@ class _RegisterState extends State<Register> {
       TextEditingController();
   final FlutterSecureStorage _storage = const FlutterSecureStorage();
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
-  bool _isLoading = false;
+  final bool _isLoading = false;
 
   Future<void> _registerUser() async {
     if (_formKey.currentState!.validate()) {
@@ -33,15 +35,11 @@ class _RegisterState extends State<Register> {
         }),
       );
 
-      print('Response status: ${response.statusCode}');
-      print('Response body: ${response.body}');
-
       if (response.statusCode == 201) {
         final parsedJson = jsonDecode(response.body);
         final String accessToken = parsedJson['access_token'];
         final String tokenType = parsedJson['token_type'];
 
-        // Save the token using secure storage
         await _storage.write(key: 'access_token', value: accessToken);
         await _storage.write(key: 'token_type', value: tokenType);
         ScaffoldMessenger.of(context).showSnackBar(
@@ -62,16 +60,16 @@ class _RegisterState extends State<Register> {
 
   @override
   Widget build(BuildContext context) {
-    // Prilagođena širina za web prikaz
     double formWidth = MediaQuery.of(context).size.width;
     if (formWidth > 600) {
-      formWidth = 500; // Maksimalna širina forme na webu
+      formWidth = 500;
     }
 
     return Scaffold(
       backgroundColor: Colors.grey[100],
       appBar: AppBar(
-        title: const Text('Register'),
+        title: const Text('ImageCloud'),
+        foregroundColor: Colors.white,
         backgroundColor: Colors.blue[800],
         elevation: 0,
       ),
@@ -80,8 +78,7 @@ class _RegisterState extends State<Register> {
           child: SingleChildScrollView(
             padding: const EdgeInsets.all(24.0),
             child: ConstrainedBox(
-              constraints: BoxConstraints(
-                  maxWidth: formWidth), // Ograničava širinu forme
+              constraints: BoxConstraints(maxWidth: formWidth),
               child: Form(
                 key: _formKey,
                 child: Column(

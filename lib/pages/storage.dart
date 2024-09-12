@@ -1,3 +1,5 @@
+// ignore_for_file: use_build_context_synchronously
+
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -8,23 +10,21 @@ import 'package:photo_view/photo_view.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
-// Conditionally import `dart:html` for the web
 import 'conditional_imports/web_import_stub.dart'
     if (dart.library.html) 'dart:html' show AnchorElement;
 
-// Conditionally import `dart:io` for mobile platforms (iOS, Android)
 import 'conditional_imports/io_import_stub.dart' if (dart.library.io) 'dart:io'
     show Platform, Directory;
 
 class Storage extends StatefulWidget {
-  const Storage({Key? key}) : super(key: key);
+  const Storage({super.key});
 
   @override
   State<Storage> createState() => _StorageState();
 }
 
 class _StorageState extends State<Storage> {
-  final String baseUrl = 'http://korika.ddns.net:8000'; // Base URL for API
+  final String baseUrl = 'http://korika.ddns.net:8000';
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
   final ValueNotifier<Set<String>> _selectedImages =
       ValueNotifier<Set<String>>({});
@@ -41,7 +41,8 @@ class _StorageState extends State<Storage> {
       backgroundColor: Colors.grey[200],
       appBar: AppBar(
         backgroundColor: Colors.blue[900],
-        title: const Text('Storage'),
+        title: const Text('ImageCloud'),
+        foregroundColor: Colors.white,
         elevation: 0,
         automaticallyImplyLeading: false,
       ),
@@ -56,10 +57,8 @@ class _StorageState extends State<Storage> {
             } else if (!snapshot.hasData || snapshot.data!.isEmpty) {
               return const Center(child: Text('No images available.'));
             } else {
-              // Prilagodimo broj slika po redu u zavisnosti od uređaja (web ili mobilni)
-              final isWeb = kIsWeb;
-              final crossAxisCount =
-                  isWeb ? 4 : 2; // Za web prikaži više slika u jednom redu
+              const isWeb = kIsWeb;
+              const crossAxisCount = isWeb ? 4 : 2;
 
               return Column(
                 children: [
@@ -67,9 +66,9 @@ class _StorageState extends State<Storage> {
                     child: GridView.builder(
                       padding: const EdgeInsets.symmetric(
                           horizontal: 16.0, vertical: 8.0),
-                      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                        crossAxisCount:
-                            crossAxisCount, // 4 slike po redu na webu, 2 na mobilnom
+                      gridDelegate:
+                          const SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: crossAxisCount,
                         crossAxisSpacing: 16.0,
                         mainAxisSpacing: 16.0,
                       ),
@@ -174,7 +173,7 @@ class _StorageState extends State<Storage> {
               child: const Icon(Icons.add),
             );
           }
-          return const SizedBox.shrink(); // Hide FAB when images are selected
+          return const SizedBox.shrink();
         },
       ),
     );
@@ -199,11 +198,9 @@ class _StorageState extends State<Storage> {
 
   Future<void> pickImagesFromGallery(BuildContext context) async {
     final ImagePicker picker = ImagePicker();
-    final List<XFile>? images = await picker.pickMultiImage();
-    if (images != null) {
-      final token = await _retrieveToken();
-      await uploadPictures(images, token, context);
-    }
+    final List<XFile> images = await picker.pickMultiImage();
+    final token = await _retrieveToken();
+    await uploadPictures(images, token, context);
   }
 
   Future<void> uploadPictures(
@@ -227,16 +224,14 @@ class _StorageState extends State<Storage> {
 
       var response = await request.send();
       if (response.statusCode == 201) {
-        print('Image uploaded successfully');
       } else {
         uploadSuccessful = false;
-        print('Error uploading image: ${response.statusCode}');
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Error uploading image: ${response.statusCode}'),
           ),
         );
-        break; // Exit the loop on error
+        break;
       }
     }
 
@@ -259,7 +254,6 @@ class _StorageState extends State<Storage> {
         throw Exception('Failed to load images');
       }
     } catch (e) {
-      print('Error fetching images: $e');
       return [];
     }
   }
@@ -276,14 +270,15 @@ class _StorageState extends State<Storage> {
       );
 
       if (response.statusCode == 204) {
-        print('Image deleted successfully');
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Image deleted successfully')),
+        );
       } else {
         deletionSuccessful = false;
-        print('Error deleting image: ${response.statusCode}');
       }
     }
 
-    Navigator.pop(context); // Close the loading indicator
+    Navigator.pop(context);
 
     if (deletionSuccessful) {
       setState(() {
@@ -308,13 +303,11 @@ class _StorageState extends State<Storage> {
       );
 
       if (response.statusCode == 200) {
-        print('Image moved to $folderName successfully');
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Image moved to $folderName successfully')),
         );
       } else {
         moveSuccessful = false;
-        print('Error moving image: ${response.statusCode}');
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Error moving image: ${response.statusCode}')),
         );
@@ -334,7 +327,6 @@ class _StorageState extends State<Storage> {
       String userId = decodedToken['user_id'].toString();
       return userId;
     } catch (e) {
-      print('Error decoding token: $e');
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Failed to decode token'),
@@ -373,19 +365,15 @@ class _StorageState extends State<Storage> {
 
       try {
         if (kIsWeb) {
-          // Web: Create an anchor element to trigger download
           AnchorElement anchorElement = AnchorElement(href: imageUrl);
           anchorElement.download = imagePath.split('/').last;
           anchorElement.target = '_blank';
           anchorElement.click();
-          print('Web download triggered for $imageUrl');
         } else if (Platform.isAndroid || Platform.isIOS) {
-          // Mobile platforms: Use app's document directory
           Directory directory =
               (await getApplicationDocumentsDirectory()) as Directory;
           final filePath = '${directory.path}/${imagePath.split('/').last}';
 
-          // Download image using Dio
           await dio.download(
             imageUrl,
             filePath,
@@ -394,7 +382,6 @@ class _StorageState extends State<Storage> {
             }),
           );
 
-          print('Downloaded image to $filePath');
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text('Downloaded ${imagePath.split('/').last}')),
           );
@@ -402,7 +389,6 @@ class _StorageState extends State<Storage> {
           throw UnsupportedError('Download is not supported on this platform.');
         }
       } catch (e) {
-        print('Error downloading image: $e');
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Error downloading image: ${e.toString()}')),
         );
@@ -463,7 +449,7 @@ class _StorageState extends State<Storage> {
                 return ListTile(
                   title: Text(folders[index]),
                   onTap: () async {
-                    Navigator.pop(context); // Close the dialog
+                    Navigator.pop(context);
                     await _moveImagesToFolder(folders[index]);
                   },
                 );

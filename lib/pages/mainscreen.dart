@@ -1,3 +1,5 @@
+// ignore_for_file: library_private_types_in_public_api, use_build_context_synchronously, deprecated_member_use
+
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:imagecloud/pages/storage.dart';
@@ -17,8 +19,8 @@ class _MainScreenState extends State<MainScreen> {
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
 
   final List<Widget> _pages = [
-    const Storage(), // Storage Page
-    const Folder(), // Folder Page
+    const Storage(),
+    const Folder(),
   ];
 
   @override
@@ -29,7 +31,6 @@ class _MainScreenState extends State<MainScreen> {
 
   void _onItemTapped(int index) async {
     if (index == 2) {
-      // If Logout is tapped
       await _logout();
     } else {
       setState(() {
@@ -40,10 +41,8 @@ class _MainScreenState extends State<MainScreen> {
   }
 
   Future<void> _logout() async {
-    // Clear the token from secure storage
     await _secureStorage.delete(key: 'access_token');
 
-    // Navigate to the login screen and remove the current stack
     Navigator.pushAndRemoveUntil(
       context,
       MaterialPageRoute(builder: (context) => const Login()),
@@ -57,10 +56,8 @@ class _MainScreenState extends State<MainScreen> {
       body: WillPopScope(
         onWillPop: () async {
           if (_currentIndex == 0) {
-            // If on the first page, allow the app to close
             return true;
           } else {
-            // Navigate to the first page instead of exiting
             _onItemTapped(0);
             return false;
           }

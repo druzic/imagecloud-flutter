@@ -1,9 +1,10 @@
+// ignore_for_file: non_constant_identifier_names, use_build_context_synchronously
+
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:imagecloud/pages/mainscreen.dart';
-import 'package:jwt_decoder/jwt_decoder.dart';
 
 class Login extends StatefulWidget {
   const Login({super.key});
@@ -48,16 +49,16 @@ class _LoginState extends State<Login> {
 
   @override
   Widget build(BuildContext context) {
-    // Prilagođena širina za web prikaz
     double formWidth = MediaQuery.of(context).size.width;
     if (formWidth > 600) {
-      formWidth = 500; // Maksimalna širina forme na webu
+      formWidth = 500;
     }
 
     return Scaffold(
       backgroundColor: Colors.grey[100],
       appBar: AppBar(
         title: const Text('ImageCloud'),
+        foregroundColor: Colors.white,
         backgroundColor: Colors.blue[800],
         elevation: 0,
       ),
@@ -66,8 +67,7 @@ class _LoginState extends State<Login> {
           child: SingleChildScrollView(
             padding: const EdgeInsets.all(24.0),
             child: ConstrainedBox(
-              constraints: BoxConstraints(
-                  maxWidth: formWidth), // Ograničava širinu forme
+              constraints: BoxConstraints(maxWidth: formWidth),
               child: Form(
                 key: _formKey,
                 child: Column(
@@ -174,8 +174,6 @@ Future<User> loginUser(
     await storage.write(key: 'access_token', value: user.access_token);
     await storage.write(key: 'token_type', value: user.token_type);
 
-    final bool isTokenValid = !JwtDecoder.isExpired(user.access_token);
-    print('Is token valid: $isTokenValid');
     return user;
   } else {
     throw Exception('Failed to login.');

@@ -1,3 +1,5 @@
+// ignore_for_file: use_build_context_synchronously, file_names, library_private_types_in_public_api
+
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart' show kIsWeb;
@@ -274,12 +276,18 @@ class _FolderState extends State<Folder> with SingleTickerProviderStateMixin {
       backgroundColor: Colors.grey[200],
       appBar: AppBar(
         backgroundColor: Colors.blue[900],
-        title: const Text('Folders'),
+        title: const Text('ImageCloud'),
+        foregroundColor: Colors.white,
         bottom: TabBar(
           controller: _tabController,
+          labelColor: Colors.white,
+          indicatorColor: Colors.white,
+          unselectedLabelColor: Colors.white60,
           tabs: const [
             Tab(text: 'My Folders'),
-            Tab(text: 'Shared With Me'),
+            Tab(
+              text: 'Shared With Me',
+            ),
           ],
         ),
       ),
@@ -329,7 +337,7 @@ class _FolderState extends State<Folder> with SingleTickerProviderStateMixin {
 class FolderDetail extends StatefulWidget {
   final String folderName;
 
-  const FolderDetail({required this.folderName, Key? key}) : super(key: key);
+  const FolderDetail({required this.folderName, super.key});
 
   @override
   _FolderDetailState createState() => _FolderDetailState();
@@ -537,13 +545,11 @@ class _FolderDetailState extends State<FolderDetail> {
     Dio dio = Dio();
 
     if (kIsWeb) {
-      // Web: Trigger a download using AnchorElement
       AnchorElement anchorElement = AnchorElement(href: imageUrl);
       anchorElement.download = imagePath.split('/').last;
       anchorElement.target = '_blank';
       anchorElement.click();
     } else {
-      // Mobile: Use Dio to download the file and save it locally
       Directory? directory = await getApplicationDocumentsDirectory();
       final filePath = '${directory.path}/${imagePath.split('/').last}';
       await dio.download(
@@ -567,13 +573,14 @@ class _FolderDetailState extends State<FolderDetail> {
 
   @override
   Widget build(BuildContext context) {
-    final isWeb = kIsWeb;
-    final crossAxisCount = isWeb ? 4 : 2;
+    const isWeb = kIsWeb;
+    const crossAxisCount = isWeb ? 4 : 2;
     return Scaffold(
       backgroundColor: Colors.grey[200],
       appBar: AppBar(
         backgroundColor: Colors.blue[900],
         title: Text(widget.folderName),
+        foregroundColor: Colors.white,
         elevation: 0,
       ),
       body: SafeArea(
@@ -582,9 +589,8 @@ class _FolderDetailState extends State<FolderDetail> {
             : GridView.builder(
                 padding:
                     const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount:
-                      crossAxisCount, // 4 slike po redu na webu, 2 na mobilnom
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: crossAxisCount,
                   crossAxisSpacing: 16.0,
                   mainAxisSpacing: 16.0,
                 ),
