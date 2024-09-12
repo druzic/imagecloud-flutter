@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:imagecloud/pages/mainscreen.dart';
 
 class Register extends StatefulWidget {
   const Register({super.key});
@@ -13,11 +15,12 @@ class _RegisterState extends State<Register> {
   final _formKey = GlobalKey<FormState>();
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
+  final FlutterSecureStorage _storage = const FlutterSecureStorage();
 
   Future<void> _registerUser() async {
     if (_formKey.currentState!.validate()) {
       final response = await http.post(
-        Uri.parse('http://10.0.2.2:8000/users'),
+        Uri.parse('http://korika.ddns.net:8000/users'),
         headers: <String, String>{
           'Content-Type': 'application/json; charset=UTF-8',
         },
@@ -31,10 +34,21 @@ class _RegisterState extends State<Register> {
       print('Response body: ${response.body}');
 
       if (response.statusCode == 201) {
+        final parsedJson = jsonDecode(response.body);
+        final String accessToken = parsedJson['access_token'];
+        final String tokenType = parsedJson['token_type'];
+
+        // Save the token using secure storage
+        await _storage.write(key: 'access_token', value: accessToken);
+        await _storage.write(key: 'token_type', value: tokenType);
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Registration successful')),
         );
-        Navigator.pushReplacementNamed(context, '/storage');
+        Navigator.pushAndRemoveUntil(
+          context,
+          MaterialPageRoute(builder: (context) => const MainScreen()),
+          (Route<dynamic> route) => false,
+        );
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Failed to register: ${response.body}')),

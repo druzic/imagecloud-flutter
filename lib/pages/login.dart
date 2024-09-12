@@ -126,8 +126,8 @@ Future<User> loginUser(
     'password': password,
   };
 
-  final response =
-      await http.post(Uri.parse('http://10.0.2.2:8000/login'), body: map);
+  final response = await http
+      .post(Uri.parse('http://korika.ddns.net:8000/login'), body: map);
 
   if (response.statusCode == 200) {
     final parsedJson = jsonDecode(response.body);

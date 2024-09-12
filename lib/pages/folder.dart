@@ -1,26 +1,22 @@
 import 'dart:convert';
+import 'dart:io';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 import 'package:photo_view/photo_view.dart';
 import 'package:jwt_decoder/jwt_decoder.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:dio/dio.dart';
+
+import 'download_stub.dart' if (dart.library.html) 'dart:html'
+    show AnchorElement;
 
 class Folder extends StatefulWidget {
   const Folder({super.key});
 
   @override
   State<Folder> createState() => _FolderState();
-}
-
-Future<String> _extractUserIdFromToken(String token) async {
-  try {
-    Map<String, dynamic> decodedToken = JwtDecoder.decode(token);
-    String userId = decodedToken['user_id'].toString();
-    return userId;
-  } catch (e) {
-    print('Error decoding token: $e');
-    return '';
-  }
 }
 
 class _FolderState extends State<Folder> with SingleTickerProviderStateMixin {
@@ -36,18 +32,35 @@ class _FolderState extends State<Folder> with SingleTickerProviderStateMixin {
     _tabController = TabController(length: 2, vsync: this);
   }
 
+  @override
+  void dispose() {
+    _folderNameController.dispose();
+    _tabController?.dispose();
+    super.dispose();
+  }
+
+  Future<String> _extractUserIdFromToken(String token) async {
+    try {
+      Map<String, dynamic> decodedToken = JwtDecoder.decode(token);
+      String userId = decodedToken['user_id'].toString();
+      return userId;
+    } catch (e) {
+      _showErrorSnackBar('Error decoding token: $e');
+      return '';
+    }
+  }
+
   Future<void> _fetchFolders() async {
     try {
       final token = await _retrieveToken();
       String userId = await _extractUserIdFromToken(token);
       final response = await http.get(
-        Uri.parse('http://10.0.2.2:8000/folders'),
+        Uri.parse('http://korika.ddns.net:8000/folders'),
         headers: <String, String>{'Authorization': 'Bearer $token'},
       );
 
       if (response.statusCode == 200) {
         final List<dynamic> jsonResponse = jsonDecode(response.body);
-        print(jsonResponse);
         setState(() {
           _myFolders = jsonResponse
               .where((folder) => folder['owner_id'].toString() == userId)
@@ -59,10 +72,10 @@ class _FolderState extends State<Folder> with SingleTickerProviderStateMixin {
               .toList();
         });
       } else {
-        throw Exception('Failed to load folders');
+        _showErrorSnackBar('Failed to load folders');
       }
     } catch (e) {
-      print('Error fetching folders: $e');
+      _showErrorSnackBar('Error fetching folders: $e');
     }
   }
 
@@ -75,7 +88,7 @@ class _FolderState extends State<Folder> with SingleTickerProviderStateMixin {
     try {
       final token = await _retrieveToken();
       final response = await http.post(
-        Uri.parse('http://10.0.2.2:8000/folders'),
+        Uri.parse('http://korika.ddns.net:8000/folders'),
         headers: <String, String>{
           'Content-Type': 'application/json; charset=UTF-8',
           'Authorization': 'Bearer $token',
@@ -89,10 +102,10 @@ class _FolderState extends State<Folder> with SingleTickerProviderStateMixin {
           _folderNameController.clear();
         });
       } else {
-        throw Exception('Failed to create folder');
+        _showErrorSnackBar('Failed to create folder');
       }
     } catch (e) {
-      print('Error creating folder: $e');
+      _showErrorSnackBar('Error creating folder: $e');
     }
   }
 
@@ -100,7 +113,7 @@ class _FolderState extends State<Folder> with SingleTickerProviderStateMixin {
     try {
       final token = await _retrieveToken();
       final response = await http.delete(
-        Uri.parse('http://10.0.2.2:8000/folders/$folderName'),
+        Uri.parse('http://korika.ddns.net:8000/folders/$folderName'),
         headers: <String, String>{'Authorization': 'Bearer $token'},
       );
 
@@ -112,23 +125,14 @@ class _FolderState extends State<Folder> with SingleTickerProviderStateMixin {
           SnackBar(content: Text('Folder "$folderName" deleted successfully')),
         );
       } else {
-        throw Exception('Failed to delete folder');
+        _showErrorSnackBar('Failed to delete folder');
       }
     } catch (e) {
-      print('Error deleting folder: $e');
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error deleting folder: $e')),
-      );
+      _showErrorSnackBar('Error deleting folder: $e');
     }
   }
 
-  Future<String> _retrieveToken() async {
-    const storage = FlutterSecureStorage();
-    final token = await storage.read(key: 'access_token');
-    return token ?? '';
-  }
-
-  void _shareFolder(String folderName) {
+  Future<void> _shareFolder(String folderName) async {
     showDialog(
       context: context,
       builder: (BuildContext context) {
@@ -156,7 +160,7 @@ class _FolderState extends State<Folder> with SingleTickerProviderStateMixin {
                   try {
                     final token = await _retrieveToken();
                     final response = await http.post(
-                      Uri.parse('http://10.0.2.2:8000/folders/share'),
+                      Uri.parse('http://korika.ddns.net:8000/folders/share'),
                       headers: <String, String>{
                         'Content-Type': 'application/json; charset=UTF-8',
                         'Authorization': 'Bearer $token',
@@ -175,13 +179,10 @@ class _FolderState extends State<Folder> with SingleTickerProviderStateMixin {
                         ),
                       );
                     } else {
-                      throw Exception('Failed to share folder');
+                      _showErrorSnackBar('Failed to share folder');
                     }
                   } catch (e) {
-                    print('Error sharing folder: $e');
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Error sharing folder: $e')),
-                    );
+                    _showErrorSnackBar('Error sharing folder: $e');
                   }
                 }
                 Navigator.of(context).pop();
@@ -252,6 +253,18 @@ class _FolderState extends State<Folder> with SingleTickerProviderStateMixin {
           ],
         );
       },
+    );
+  }
+
+  Future<String> _retrieveToken() async {
+    const storage = FlutterSecureStorage();
+    final token = await storage.read(key: 'access_token');
+    return token ?? '';
+  }
+
+  void _showErrorSnackBar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message)),
     );
   }
 
@@ -337,7 +350,7 @@ class _FolderDetailState extends State<FolderDetail> {
     try {
       final token = await _retrieveToken();
       final response = await http.get(
-        Uri.parse('http://10.0.2.2:8000/folders/${widget.folderName}'),
+        Uri.parse('http://korika.ddns.net:8000/folders/${widget.folderName}'),
         headers: <String, String>{
           'Authorization': 'Bearer $token',
           'Content-Type': 'application/json; charset=UTF-8',
@@ -351,10 +364,10 @@ class _FolderDetailState extends State<FolderDetail> {
               jsonResponse.map((image) => image['path'].toString()).toList();
         });
       } else {
-        throw Exception('Failed to load images');
+        _showErrorSnackBar('Failed to load images');
       }
     } catch (e) {
-      print('Error fetching images: $e');
+      _showErrorSnackBar('Error fetching images: $e');
     }
   }
 
@@ -363,7 +376,7 @@ class _FolderDetailState extends State<FolderDetail> {
       final token = await _retrieveToken();
       String userId = await _extractUserIdFromToken(token);
       final response = await http.get(
-        Uri.parse('http://10.0.2.2:8000/folders'),
+        Uri.parse('http://korika.ddns.net:8000/folders'),
         headers: <String, String>{
           'Authorization': 'Bearer $token',
           'Content-Type': 'application/json; charset=UTF-8',
@@ -379,10 +392,10 @@ class _FolderDetailState extends State<FolderDetail> {
               .toList();
         });
       } else {
-        throw Exception('Failed to load folders');
+        _showErrorSnackBar('Failed to load folders');
       }
     } catch (e) {
-      print('Error fetching folders: $e');
+      _showErrorSnackBar('Error fetching folders: $e');
     }
   }
 
@@ -390,7 +403,7 @@ class _FolderDetailState extends State<FolderDetail> {
     try {
       final token = await _retrieveToken();
       final response = await http.post(
-        Uri.parse('http://10.0.2.2:8000/images/change_folder'),
+        Uri.parse('http://korika.ddns.net:8000/images/change_folder'),
         headers: <String, String>{
           'Authorization': 'Bearer $token',
           'Content-Type': 'application/json; charset=UTF-8',
@@ -407,13 +420,10 @@ class _FolderDetailState extends State<FolderDetail> {
           SnackBar(content: Text('Image moved to $targetFolder successfully')),
         );
       } else {
-        throw Exception('Failed to move image');
+        _showErrorSnackBar('Failed to move image');
       }
     } catch (e) {
-      print('Error moving image: $e');
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error moving image: $e')),
-      );
+      _showErrorSnackBar('Error moving image: $e');
     }
   }
 
@@ -421,7 +431,7 @@ class _FolderDetailState extends State<FolderDetail> {
     try {
       final token = await _retrieveToken();
       final response = await http.delete(
-        Uri.parse('http://10.0.2.2:8000/images/$imagePath'),
+        Uri.parse('http://korika.ddns.net:8000/images/$imagePath'),
         headers: <String, String>{'Authorization': 'Bearer $token'},
       );
 
@@ -433,13 +443,10 @@ class _FolderDetailState extends State<FolderDetail> {
           const SnackBar(content: Text('Image deleted successfully')),
         );
       } else {
-        throw Exception('Failed to delete image');
+        _showErrorSnackBar('Failed to delete image');
       }
     } catch (e) {
-      print('Error deleting image: $e');
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error deleting image: $e')),
-      );
+      _showErrorSnackBar('Error deleting image: $e');
     }
   }
 
@@ -447,6 +454,17 @@ class _FolderDetailState extends State<FolderDetail> {
     const storage = FlutterSecureStorage();
     final token = await storage.read(key: 'access_token');
     return token ?? '';
+  }
+
+  Future<String> _extractUserIdFromToken(String token) async {
+    try {
+      Map<String, dynamic> decodedToken = JwtDecoder.decode(token);
+      String userId = decodedToken['user_id'].toString();
+      return userId;
+    } catch (e) {
+      _showErrorSnackBar('Error decoding token: $e');
+      return '';
+    }
   }
 
   void _onImageLongPress(String imagePath) {
@@ -461,6 +479,14 @@ class _FolderDetailState extends State<FolderDetail> {
               onTap: () async {
                 Navigator.pop(context);
                 _showFolderSelectionDialog(imagePath);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.download),
+              title: const Text('Download Image'),
+              onTap: () async {
+                Navigator.pop(context);
+                await _downloadImage(imagePath);
               },
             ),
             ListTile(
@@ -504,6 +530,41 @@ class _FolderDetailState extends State<FolderDetail> {
     );
   }
 
+  Future<void> _downloadImage(String imagePath) async {
+    final imageUrl =
+        'http://korika.ddns.net:8000/images/$imagePath'.replaceAll(r'\', '/');
+    final token = await _retrieveToken();
+    Dio dio = Dio();
+
+    if (kIsWeb) {
+      // Web: Trigger a download using AnchorElement
+      AnchorElement anchorElement = AnchorElement(href: imageUrl);
+      anchorElement.download = imagePath.split('/').last;
+      anchorElement.target = '_blank';
+      anchorElement.click();
+    } else {
+      // Mobile: Use Dio to download the file and save it locally
+      Directory? directory = await getApplicationDocumentsDirectory();
+      final filePath = '${directory.path}/${imagePath.split('/').last}';
+      await dio.download(
+        imageUrl,
+        filePath,
+        options: Options(headers: {
+          'Authorization': 'Bearer $token',
+        }),
+      );
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Downloaded ${imagePath.split('/').last}')),
+      );
+    }
+  }
+
+  void _showErrorSnackBar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message)),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -526,7 +587,7 @@ class _FolderDetailState extends State<FolderDetail> {
                 itemCount: _images.length,
                 itemBuilder: (context, index) {
                   final imageUrl =
-                      'http://10.0.2.2:8000/images/${_images[index]}'
+                      'http://korika.ddns.net:8000/images/${_images[index]}'
                           .replaceAll(r'\', '/');
                   return GestureDetector(
                     onTap: () {

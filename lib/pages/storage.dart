@@ -5,6 +5,16 @@ import 'package:image_picker/image_picker.dart';
 import 'package:http/http.dart' as http;
 import 'package:jwt_decoder/jwt_decoder.dart';
 import 'package:photo_view/photo_view.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
+// Conditionally import `dart:html` for the web
+import 'conditional_imports/web_import_stub.dart'
+    if (dart.library.html) 'dart:html' show AnchorElement;
+
+// Conditionally import `dart:io` for mobile platforms (iOS, Android)
+import 'conditional_imports/io_import_stub.dart' if (dart.library.io) 'dart:io'
+    show Platform, Directory;
 
 class Storage extends StatefulWidget {
   const Storage({Key? key}) : super(key: key);
@@ -14,10 +24,16 @@ class Storage extends StatefulWidget {
 }
 
 class _StorageState extends State<Storage> {
-  final String baseUrl = 'http://10.0.2.2:8000'; // Base URL for API
+  final String baseUrl = 'http://korika.ddns.net:8000'; // Base URL for API
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
   final ValueNotifier<Set<String>> _selectedImages =
       ValueNotifier<Set<String>>({});
+
+  @override
+  void dispose() {
+    _selectedImages.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -179,6 +195,8 @@ class _StorageState extends State<Storage> {
 
   Future<void> uploadPictures(
       List<XFile> images, String token, BuildContext context) async {
+    bool uploadSuccessful = true;
+
     for (XFile image in images) {
       List<int> imageBytes = await image.readAsBytes();
       var request = http.MultipartRequest(
@@ -198,32 +216,44 @@ class _StorageState extends State<Storage> {
       if (response.statusCode == 201) {
         print('Image uploaded successfully');
       } else {
+        uploadSuccessful = false;
         print('Error uploading image: ${response.statusCode}');
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Error uploading image: ${response.statusCode}'),
           ),
         );
+        break; // Exit the loop on error
       }
     }
-    setState(() {});
+
+    if (uploadSuccessful) {
+      setState(() {});
+    }
   }
 
   Future<List<String>> fetchImages(String token) async {
-    final response = await http.get(
-      Uri.parse('$baseUrl/images'),
-      headers: {'Authorization': 'Bearer $token'},
-    );
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/images'),
+        headers: {'Authorization': 'Bearer $token'},
+      );
 
-    if (response.statusCode == 200) {
-      final List<dynamic> imagePath = jsonDecode(response.body);
-      return imagePath.map((image) => image['path'] as String).toList();
-    } else {
-      throw Exception('Failed to load images');
+      if (response.statusCode == 200) {
+        final List<dynamic> imagePath = jsonDecode(response.body);
+        return imagePath.map((image) => image['path'] as String).toList();
+      } else {
+        throw Exception('Failed to load images');
+      }
+    } catch (e) {
+      // Log or handle the error more specifically
+      print('Error fetching images: $e');
+      return []; // Return an empty list on error
     }
   }
 
   Future<void> _deleteSelectedImages() async {
+    _showLoadingIndicator(context);
     final token = await _retrieveToken();
     bool deletionSuccessful = true;
 
@@ -235,21 +265,13 @@ class _StorageState extends State<Storage> {
 
       if (response.statusCode == 204) {
         print('Image deleted successfully');
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Image deleted successfully'),
-          ),
-        );
       } else {
         deletionSuccessful = false;
         print('Error deleting image: ${response.statusCode}');
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error deleting image: ${response.statusCode}'),
-          ),
-        );
       }
     }
+
+    Navigator.pop(context); // Close the loading indicator
 
     if (deletionSuccessful) {
       setState(() {
@@ -301,6 +323,11 @@ class _StorageState extends State<Storage> {
       return userId;
     } catch (e) {
       print('Error decoding token: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Failed to decode token'),
+        ),
+      );
       return '';
     }
   }
@@ -325,12 +352,66 @@ class _StorageState extends State<Storage> {
     }
   }
 
+  Future<void> _downloadSelectedImages() async {
+    final token = await _retrieveToken();
+    Dio dio = Dio();
+
+    for (String imagePath in _selectedImages.value) {
+      final imageUrl = '$baseUrl/images/$imagePath';
+
+      try {
+        if (kIsWeb) {
+          // Web: Create an anchor element to trigger download
+          AnchorElement anchorElement = AnchorElement(href: imageUrl);
+          anchorElement.download = imagePath.split('/').last;
+          anchorElement.target = '_blank';
+          anchorElement.click();
+          print('Web download triggered for $imageUrl');
+        } else if (Platform.isAndroid || Platform.isIOS) {
+          // Mobile platforms: Use app's document directory
+          Directory directory =
+              (await getApplicationDocumentsDirectory()) as Directory;
+          final filePath = '${directory.path}/${imagePath.split('/').last}';
+
+          // Download image using Dio
+          await dio.download(
+            imageUrl,
+            filePath,
+            options: Options(headers: {
+              'Authorization': 'Bearer $token',
+            }),
+          );
+
+          print('Downloaded image to $filePath');
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Downloaded ${imagePath.split('/').last}')),
+          );
+        } else {
+          throw UnsupportedError('Download is not supported on this platform.');
+        }
+      } catch (e) {
+        print('Error downloading image: $e');
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error downloading image: ${e.toString()}')),
+        );
+      }
+    }
+  }
+
   void _showManageSelectedImagesModal() {
     showModalBottomSheet(
       context: context,
       builder: (BuildContext context) {
         return Wrap(
           children: [
+            ListTile(
+              leading: const Icon(Icons.download, color: Colors.blue),
+              title: const Text('Download Selected Images'),
+              onTap: () async {
+                Navigator.pop(context);
+                await _downloadSelectedImages();
+              },
+            ),
             ListTile(
               leading: const Icon(Icons.delete, color: Colors.red),
               title: const Text('Delete Selected Images'),
@@ -377,6 +458,18 @@ class _StorageState extends State<Storage> {
               },
             ),
           ),
+        );
+      },
+    );
+  }
+
+  void _showLoadingIndicator(BuildContext context) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) {
+        return const Center(
+          child: CircularProgressIndicator(),
         );
       },
     );
