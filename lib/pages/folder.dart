@@ -567,6 +567,8 @@ class _FolderDetailState extends State<FolderDetail> {
 
   @override
   Widget build(BuildContext context) {
+    final isWeb = kIsWeb;
+    final crossAxisCount = isWeb ? 4 : 2;
     return Scaffold(
       backgroundColor: Colors.grey[200],
       appBar: AppBar(
@@ -578,11 +580,13 @@ class _FolderDetailState extends State<FolderDetail> {
         child: _images.isEmpty
             ? const Center(child: Text('No images in this folder'))
             : GridView.builder(
-                padding: const EdgeInsets.all(8.0),
-                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 2,
-                  crossAxisSpacing: 4.0,
-                  mainAxisSpacing: 4.0,
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount:
+                      crossAxisCount, // 4 slike po redu na webu, 2 na mobilnom
+                  crossAxisSpacing: 16.0,
+                  mainAxisSpacing: 16.0,
                 ),
                 itemCount: _images.length,
                 itemBuilder: (context, index) {

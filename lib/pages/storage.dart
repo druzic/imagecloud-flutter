@@ -56,26 +56,34 @@ class _StorageState extends State<Storage> {
             } else if (!snapshot.hasData || snapshot.data!.isEmpty) {
               return const Center(child: Text('No images available.'));
             } else {
+              // Prilagodimo broj slika po redu u zavisnosti od uređaja (web ili mobilni)
+              final isWeb = kIsWeb;
+              final crossAxisCount =
+                  isWeb ? 4 : 2; // Za web prikaži više slika u jednom redu
+
               return Column(
                 children: [
                   Expanded(
                     child: GridView.builder(
-                      padding: const EdgeInsets.all(8.0),
-                      gridDelegate:
-                          const SliverGridDelegateWithFixedCrossAxisCount(
-                        crossAxisCount: 2,
-                        crossAxisSpacing: 4.0,
-                        mainAxisSpacing: 4.0,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 16.0, vertical: 8.0),
+                      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount:
+                            crossAxisCount, // 4 slike po redu na webu, 2 na mobilnom
+                        crossAxisSpacing: 16.0,
+                        mainAxisSpacing: 16.0,
                       ),
                       itemCount: snapshot.data!.length,
                       itemBuilder: (context, index) {
                         final imagePath = snapshot.data![index];
                         final imageUrl = '$baseUrl/images/$imagePath';
+
                         return ValueListenableBuilder<Set<String>>(
                           valueListenable: _selectedImages,
                           builder: (context, selectedImages, child) {
                             final isSelected =
                                 selectedImages.contains(imagePath);
+
                             return GestureDetector(
                               onLongPress: () {
                                 _toggleSelection(imagePath);
@@ -100,12 +108,17 @@ class _StorageState extends State<Storage> {
                               child: Stack(
                                 children: [
                                   Positioned.fill(
-                                    child: Image.network(
-                                      imageUrl,
-                                      fit: BoxFit.cover,
-                                      color: isSelected ? Colors.black54 : null,
-                                      colorBlendMode:
-                                          isSelected ? BlendMode.darken : null,
+                                    child: ClipRRect(
+                                      borderRadius: BorderRadius.circular(8.0),
+                                      child: Image.network(
+                                        imageUrl,
+                                        fit: BoxFit.cover,
+                                        color:
+                                            isSelected ? Colors.black54 : null,
+                                        colorBlendMode: isSelected
+                                            ? BlendMode.darken
+                                            : null,
+                                      ),
                                     ),
                                   ),
                                   if (isSelected)
@@ -246,9 +259,8 @@ class _StorageState extends State<Storage> {
         throw Exception('Failed to load images');
       }
     } catch (e) {
-      // Log or handle the error more specifically
       print('Error fetching images: $e');
-      return []; // Return an empty list on error
+      return [];
     }
   }
 

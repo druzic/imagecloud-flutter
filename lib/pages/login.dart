@@ -34,9 +34,11 @@ class _LoginState extends State<Login> {
       );
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to login: ${e.toString()}')),
+        SnackBar(
+          content: Text('Failed to login: ${e.toString()}'),
+          backgroundColor: Colors.red,
+        ),
       );
-      print('Failed to login: ${e.toString()}');
     } finally {
       setState(() {
         _isLoading = false;
@@ -46,70 +48,105 @@ class _LoginState extends State<Login> {
 
   @override
   Widget build(BuildContext context) {
+    // Prilagođena širina za web prikaz
+    double formWidth = MediaQuery.of(context).size.width;
+    if (formWidth > 600) {
+      formWidth = 500; // Maksimalna širina forme na webu
+    }
+
     return Scaffold(
-      backgroundColor: Colors.grey[200],
+      backgroundColor: Colors.grey[100],
       appBar: AppBar(
-        backgroundColor: Colors.blue[900],
-        title: const Text('Login'),
+        title: const Text('ImageCloud'),
+        backgroundColor: Colors.blue[800],
         elevation: 0,
       ),
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
-            padding: const EdgeInsets.all(16.0),
-            child: Form(
-              key: _formKey,
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  TextFormField(
-                    controller: _controllerEmail,
-                    decoration: const InputDecoration(
-                      labelText: 'Email',
-                      border: OutlineInputBorder(),
+            padding: const EdgeInsets.all(24.0),
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                  maxWidth: formWidth), // Ograničava širinu forme
+              child: Form(
+                key: _formKey,
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text(
+                      'Welcome Back!',
+                      style: TextStyle(
+                        fontSize: 28,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.blue[800],
+                      ),
+                      textAlign: TextAlign.center,
                     ),
-                    keyboardType: TextInputType.emailAddress,
-                    validator: (value) {
-                      if (value == null || value.isEmpty) {
-                        return 'Please enter your email';
-                      }
-                      if (!RegExp(r'^[^@]+@[^@]+\.[^@]+').hasMatch(value)) {
-                        return 'Please enter a valid email address';
-                      }
-                      return null;
-                    },
-                  ),
-                  const SizedBox(height: 16.0),
-                  TextFormField(
-                    controller: _controllerPassword,
-                    decoration: const InputDecoration(
-                      labelText: 'Password',
-                      border: OutlineInputBorder(),
+                    const SizedBox(height: 32.0),
+                    TextFormField(
+                      controller: _controllerEmail,
+                      decoration: const InputDecoration(
+                        labelText: 'Email Address',
+                        border: OutlineInputBorder(),
+                        prefixIcon: Icon(Icons.email),
+                      ),
+                      keyboardType: TextInputType.emailAddress,
+                      validator: (value) {
+                        if (value == null || value.isEmpty) {
+                          return 'Please enter your email';
+                        }
+                        if (!RegExp(r'^[^@]+@[^@]+\.[^@]+').hasMatch(value)) {
+                          return 'Please enter a valid email address';
+                        }
+                        return null;
+                      },
                     ),
-                    obscureText: true,
-                    validator: (value) {
-                      if (value == null || value.isEmpty) {
-                        return 'Please enter your password';
-                      }
-                      if (value.length < 6) {
-                        return 'Password must be at least 6 characters';
-                      }
-                      return null;
-                    },
-                  ),
-                  const SizedBox(height: 16.0),
-                  _isLoading
-                      ? const CircularProgressIndicator()
-                      : ElevatedButton(
-                          onPressed: _loginUser,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.blue[900],
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 50, vertical: 15),
+                    const SizedBox(height: 16.0),
+                    TextFormField(
+                      controller: _controllerPassword,
+                      decoration: const InputDecoration(
+                        labelText: 'Password',
+                        border: OutlineInputBorder(),
+                        prefixIcon: Icon(Icons.lock),
+                      ),
+                      obscureText: true,
+                      validator: (value) {
+                        if (value == null || value.isEmpty) {
+                          return 'Please enter your password';
+                        }
+                        if (value.length < 6) {
+                          return 'Password must be at least 6 characters';
+                        }
+                        return null;
+                      },
+                    ),
+                    const SizedBox(height: 32.0),
+                    _isLoading
+                        ? const Center(child: CircularProgressIndicator())
+                        : ElevatedButton(
+                            onPressed: _loginUser,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.blue[800],
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 50,
+                                vertical: 16,
+                              ),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                            ),
+                            child: const Text(
+                              'Login',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
                           ),
-                          child: const Text('Login'),
-                        ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),
@@ -139,7 +176,6 @@ Future<User> loginUser(
 
     final bool isTokenValid = !JwtDecoder.isExpired(user.access_token);
     print('Is token valid: $isTokenValid');
-    print(parsedJson);
     return user;
   } else {
     throw Exception('Failed to login.');
